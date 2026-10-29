@@ -1,0 +1,48 @@
+name: Only Markdown
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  only-markdown:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check that every changed file is Markdown
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+            HEAD="${{ github.sha }}"
+          fi
+
+          if git cat-file -e "$BASE" 2>/dev/null; then
+            RANGE="$BASE..$HEAD"
+          else
+            RANGE="HEAD~1..HEAD"
+          fi
+
+          BAD_FILES=$(git diff --name-only --diff-filter=ACMR "$RANGE" \
+            | grep -v '^\.github/workflows/' \
+            | grep -v '^\.githooks/' \
+            | grep -v '\.md$' || true)
+
+          if [ -n "$BAD_FILES" ]; then
+            echo "::error::Non-Markdown files detected. This repo allows only .md files:"
+            echo "$BAD_FILES"
+            exit 1
+          fi
+
+          echo "All files are Markdown."

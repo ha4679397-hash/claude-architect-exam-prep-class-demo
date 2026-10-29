@@ -1,0 +1,17 @@
+#!/bin/sh
+# Pre-commit hook: reject any staged file that is not Markdown (.md).
+# Bypass (not recommended): git commit --no-verify
+
+bad=$(git diff --cached --name-only --diff-filter=ACMR \
+  | grep -v '^\.github/workflows/' \
+  | grep -v '^\.githooks/' \
+  | grep -v '\.md$' || true)
+
+if [ -n "$bad" ]; then
+  echo "Blocked: this repo only allows Markdown (.md) files."
+  echo "Non-Markdown files staged:"
+  echo "$bad"
+  echo
+  echo "Either convert them to .md or unstage them (git restore --staged <file>)."
+  exit 1
+fi
