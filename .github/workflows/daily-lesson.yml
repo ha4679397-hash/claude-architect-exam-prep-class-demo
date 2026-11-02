@@ -1,0 +1,77 @@
+name: Daily Lesson
+
+on:
+  schedule:
+    - cron: '0 16 * * *' # 16:00 UTC = 21:00 Pakistan (PKT, no DST)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-lesson
+  cancel-in-progress: false
+
+jobs:
+  lesson:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Generate lesson with Claude Code
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            REPO: ${{ github.repository }}
+
+            Write exactly one new study lesson for this Claude Architect exam prep repo.
+
+            1. Read topics/claude-architect-certification-outline.md for the five exam domains.
+            2. Survey the existing repo (topics/, practice/, resources/, and any lesson folders)
+               to see which sub-topics are already covered.
+            3. Pick a sub-topic from the outline that has NOT been covered yet.
+            4. Decide the best place for the lesson yourself (e.g. topics/, practice/, resources/,
+               or a dedicated lessons/ folder), matching how similar content is already organized.
+            5. Write the lesson as a single Markdown file with:
+               - H1 title and a one-paragraph summary
+               - ## Key concepts (bulleted, exam-focused)
+               - ## Exam tips
+               - ## Practice questions: 3 questions, each with its answer directly below
+               - A link back to topics/claude-architect-certification-outline.md
+            6. If the folder has an index (README.md), add a link line for the new lesson.
+            7. Create nothing else. Markdown (.md) files only.
+          claude_args: |
+            --max-turns 15
+            --allowedTools "Read,Glob,Grep,Write,Edit"
+
+      - name: Verify only Markdown changed
+        shell: bash
+        run: |
+          BAD=$(git status --porcelain | cut -c4- \
+            | grep -v '^\.github/workflows/' \
+            | grep -v '^\.githooks/' \
+            | grep -v '\.md$' || true)
+          if [ -n "$BAD" ]; then
+            echo "::error::Non-Markdown files detected. This repo allows only .md files:"
+            echo "$BAD"
+            exit 1
+          fi
+          echo "All changed files are Markdown."
+
+      - name: Commit and push
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes made by Claude — nothing to commit."
+            exit 0
+          fi
+          DATE=$(date -u +%F)
+          git commit -m "docs: add daily lesson ($DATE)"
+          git push origin HEAD
